@@ -1,0 +1,44 @@
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, expr, concat, lit, sum as spark_sum
+
+# Initialize Spark session
+spark = SparkSession.builder \
+    .appName("Data Skew with Salting") \
+    .getOrCreate()
+
+# Step 1: Create a sample DataFrame with skewed data
+data = [
+    (1001, 5.0), (1001, 7.0), (1001, 3.0), (1001, 10.0),
+    (1002, 4.0), (1002, 6.0),
+    (1003, 8.0), (1003, 2.0),
+    (1004, 1.0), (1004, 3.0),
+]
+
+columns = ["product_id", "sales"]
+df = spark.createDataFrame(data, columns)
+
+# Show original DataFrame
+print("Original DataFrame:")
+df.show()
+
+# Step 2: Apply salting
+# Create a salt column
+salted_df = df.withColumn("salt", (expr("rand() * 4").cast("int")))  # Salt with values 0, 1, 2, 3
+
+# Create a new product_id with salt
+salted_df = salted_df.withColumn("salted_product_id", concat(col("product_id"), lit("_"), col("salt")))
+
+# Show the salted DataFrame
+print("Salted DataFrame:")
+salted_df.show()
+
+# Step 3: Perform aggregation
+# Group by the new salted product_id and sum sales
+result_df = salted_df.groupBy("salted_product_id").agg(spark_sum("sales").alias("total_sales"))
+
+# Show the result
+print("Aggregated Result:")
+result_df.show()
+
+# Clean up
+spark.stop()
